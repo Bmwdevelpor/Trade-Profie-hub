@@ -1,0 +1,6 @@
+{
+  "name": "Trade Profit Hub",
+  "description": "A high-performance mobile-friendly crypto copy trading platform featuring admin panel, KYC verification, TRC20 deposit system, daily profits tracker, and profile controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
