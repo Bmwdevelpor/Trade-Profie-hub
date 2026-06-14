@@ -11,7 +11,7 @@ const currentDir = typeof __dirname !== "undefined"
   ? __dirname
   : path.dirname(fileURLToPath(import.meta.url || "file:///"));
 
-const DB_DIR = isVercel ? tmpdir() : path.join(currentDir, "data");
+const DB_DIR = isVercel ? tmpdir() : path.join(process.cwd(), "data");
 const DB_FILE = path.join(DB_DIR, "db.json");
 
 // Define DB Interface
@@ -271,7 +271,8 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // API - Auth Register
   app.post("/api/auth/register", (req, res) => {
-    const { username, fullName, email, password, referredBy } = req.body;
+    const { username, fullName, email, password, referredBy, referredByCode } = req.body;
+    const incomingReferrer = referredBy || referredByCode;
 
     if (!username || !fullName || !password) {
       return res.status(400).json({ error: "Missing mandatory registration fields." });
@@ -292,9 +293,9 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
     // Verify referrer
     let referrerId: string | null = null;
-    if (referredBy) {
+    if (incomingReferrer) {
       const activeReferrer = db.users.find(
-        (u) => u.referralCode.toLowerCase() === referredBy.trim().toLowerCase()
+        (u) => u.referralCode.toLowerCase() === incomingReferrer.trim().toLowerCase()
       );
       if (activeReferrer) {
         referrerId = activeReferrer.id;
@@ -524,11 +525,16 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
     db.users[userIndex].balance -= withdrawAmount;
 
     const withdrawalId = "with-" + Math.random().toString(36).substr(2, 9);
+    const feeValue = Number((withdrawAmount * 0.02).toFixed(2));
+    const finalAmountValue = Number((withdrawAmount - feeValue).toFixed(2));
+
     const newWithdrawal: Withdrawal = {
       id: withdrawalId,
       userId,
       username: user.username,
       amount: withdrawAmount,
+      fee: feeValue,
+      finalAmount: finalAmountValue,
       address,
       network: "TRC20",
       status: "pending",
@@ -544,7 +550,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
       username: user.username,
       type: "withdrawal",
       amount: withdrawAmount,
-      description: `TRC20 Withdrawal Request ($${withdrawAmount}) to address ${address.substring(0,6)}... - Pending approval`,
+      description: `TRC20 Withdrawal ($${withdrawAmount.toFixed(2)} USDT) - Fee: $${feeValue.toFixed(2)}, Recv: $${finalAmountValue.toFixed(2)} to address ${address.substring(0, 8)}...`,
       status: "pending",
       createdAt: new Date().toISOString()
     });
@@ -553,13 +559,27 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
       id: "notif-with-" + withdrawalId,
       userId,
       title: "Withdrawal Requested",
-      message: `An amount of ${withdrawAmount} USDT is placed on hold for withdrawal auditing.`,
+      message: `An amount of ${withdrawAmount} USDT (after 2% fee: final amount to receive is ${finalAmountValue} USDT) is placed on hold for auditing.`,
       isRead: false,
       createdAt: new Date().toISOString()
     });
 
     saveDb(db);
     return res.json({ success: true, withdrawal: newWithdrawal, user: db.users[userIndex] });
+  });
+
+  // API - Get user's structured withdrawal records
+  app.get("/api/withdrawals/:userId", (req, res) => {
+    const db = loadDb();
+    const userWithdrawals = db.withdrawals.filter((w) => w.userId === req.params.userId);
+    return res.json(userWithdrawals);
+  });
+
+  // API - Get user's structured deposit records
+  app.get("/api/deposits/:userId", (req, res) => {
+    const db = loadDb();
+    const userDeposits = db.deposits.filter((d) => d.userId === req.params.userId);
+    return res.json(userDeposits);
   });
 
   // API - Start/Join Copy Trading
@@ -911,15 +931,29 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
     const userObj = db.users[userIndex];
 
     if (approve) {
+      const bonusAmount = Number((deposit.amount * 0.10).toFixed(2));
       db.deposits[depIndex].status = "approved";
-      db.users[userIndex].balance += deposit.amount;
+      db.deposits[depIndex].bonus = bonusAmount;
+      db.users[userIndex].balance += (deposit.amount + bonusAmount);
 
       // Update the transaction log status
       const txIndex = db.transactions.findIndex((tx) => tx.id === "tx-dep-" + depositId);
       if (txIndex !== -1) {
         db.transactions[txIndex].status = "completed";
-        db.transactions[txIndex].description = `Approved USDT TRC20 Deposit ($${deposit.amount})`;
+        db.transactions[txIndex].description = `Approved USDT TRC20 Deposit ($${deposit.amount.toFixed(2)})`;
       }
+
+      // Record deposit bonus transaction to show in history
+      db.transactions.push({
+        id: "tx-dep-bonus-" + depositId,
+        userId: deposit.userId,
+        username: userObj.username,
+        type: "deposit_bonus",
+        amount: bonusAmount,
+        description: `10% Deposit Promo Bonus ($${bonusAmount.toFixed(2)}) on Top-up ($${deposit.amount.toFixed(2)})`,
+        status: "completed",
+        createdAt: new Date().toISOString()
+      });
 
       // Referral system bonus: 5% bonus to referrer for ANY approved deposit if user has registered with referral code
       if (userObj.referredBy) {
@@ -957,7 +991,7 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
         id: "notif-dep-ok-" + depositId,
         userId: deposit.userId,
         title: "USDT Top-up Approved",
-        message: `Your deposit request for ${deposit.amount} USDT has been validated. Funds are credited to your principal balance.`,
+        message: `Your deposit request for ${deposit.amount} USDT has been validated. A 10% bonus of ${bonusAmount} USDT has been credited to your principal balance successfully!`,
         isRead: false,
         createdAt: new Date().toISOString()
       });

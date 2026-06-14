@@ -39,6 +39,7 @@ export interface Deposit {
   userId: string;
   username: string;
   amount: number;
+  bonus?: number;
   txid: string;
   status: "pending" | "approved" | "rejected";
   screenshot?: string; // base64
@@ -50,6 +51,8 @@ export interface Withdrawal {
   userId: string;
   username: string;
   amount: number;
+  fee?: number;
+  finalAmount?: number;
   address: string;
   network: string;
   status: "pending" | "approved" | "rejected";
@@ -60,7 +63,7 @@ export interface Transaction {
   id: string;
   userId: string;
   username: string;
-  type: "deposit" | "withdrawal" | "copy_trade_profit" | "copy_trade_start" | "copy_trade_stop" | "referral_bonus";
+  type: "deposit" | "withdrawal" | "copy_trade_profit" | "copy_trade_start" | "copy_trade_stop" | "referral_bonus" | "deposit_bonus";
   amount: number;
   description: string;
   status: "pending" | "completed" | "failed";

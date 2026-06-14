@@ -38,6 +38,7 @@ export const api = {
       }),
   },
   deposit: {
+    list: (userId: string) => request<Deposit[]>(`/api/deposits/${userId}`),
     request: (body: { userId: string; amount: number; txid: string; screenshot?: string }) =>
       request<{ success: boolean; deposit: Deposit }>("/api/deposit/request", {
         method: "POST",
@@ -45,6 +46,7 @@ export const api = {
       }),
   },
   withdrawal: {
+    list: (userId: string) => request<Withdrawal[]>(`/api/withdrawals/${userId}`),
     request: (body: { userId: string; amount: number; address: string }) =>
       request<{ success: boolean; withdrawal: Withdrawal; user: User }>("/api/withdrawal/request", {
         method: "POST",

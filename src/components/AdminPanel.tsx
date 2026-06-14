@@ -512,11 +512,23 @@ export default function AdminPanel({ onRefreshUser }: AdminPanelProps) {
                 <div key={dep.id} className="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-4">
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-gray-900 pb-3 gap-3">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-bold text-emerald-400 font-mono">${dep.amount.toFixed(2)} USDT</span>
-                        <span className="text-[10px] text-gray-500 font-mono">Claim ID: {dep.id}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-500 font-mono">Top-up Value</span>
+                          <span className="text-base font-bold text-white font-mono">${dep.amount.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="text-gray-700 font-mono text-xs self-end mb-0.5">+</div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-500 font-mono">10% Promo Bonus</span>
+                          <span className="text-emerald-400 font-bold font-mono text-sm">${(dep.amount * 0.10).toFixed(2)} USDT</span>
+                        </div>
+                        <div className="text-gray-700 font-mono text-xs self-end mb-0.5">→</div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-400 font-mono font-medium">Total Balance Credit</span>
+                          <span className="text-emerald-400 font-extrabold font-mono text-base">${(dep.amount + dep.amount * 0.10).toFixed(2)} USDT</span>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-300 font-sans block mt-1">Submitted by: <span className="text-white font-bold font-mono">@{dep.username}</span> | ID: {dep.userId}</span>
+                      <span className="text-xs text-gray-300 font-sans block mt-2">Submitted by: <span className="text-white font-bold font-mono">@{dep.username}</span> | ID: {dep.userId}</span>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -583,11 +595,23 @@ export default function AdminPanel({ onRefreshUser }: AdminPanelProps) {
                 <div key={wit.id} className="p-4 bg-gray-950 rounded-xl border border-gray-800 space-y-3">
                   <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-gray-900 pb-3 gap-3">
                     <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-bold text-white font-mono">${wit.amount.toFixed(2)} USDT</span>
-                        <span className="text-[10px] text-gray-500 font-mono">Payout ID: {wit.id}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 font-mono">Gross Amount</span>
+                          <span className="text-base font-bold text-white font-mono">${wit.amount.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="text-gray-700 font-mono text-xs self-end mb-0.5">→</div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-500 font-mono">2% Fee</span>
+                          <span className="text-rose-450 font-bold font-mono text-sm">${(wit.fee ?? (wit.amount * 0.02)).toFixed(2)} USDT</span>
+                        </div>
+                        <div className="text-gray-700 font-mono text-xs self-end mb-0.5">→</div>
+                        <div className="flex flex-col">
+                          <span className="text-xs text-gray-400 font-mono font-medium">To Approve & Payout</span>
+                          <span className="text-emerald-400 font-extrabold font-mono text-base">${(wit.finalAmount ?? (wit.amount * 0.98)).toFixed(2)} USDT</span>
+                        </div>
                       </div>
-                      <span className="text-xs text-gray-300 block mt-1">Beneficiary profile: <span className="text-white font-boldfont-mono">@{wit.username}</span> | ID: {wit.userId}</span>
+                      <span className="text-xs text-gray-300 block mt-2">Beneficiary profile: <span className="text-white font-bold font-mono">@{wit.username}</span> | ID: {wit.userId}</span>
                     </div>
 
                     <div className="flex items-center gap-2">

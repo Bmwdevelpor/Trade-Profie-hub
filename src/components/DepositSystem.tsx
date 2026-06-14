@@ -24,34 +24,28 @@ export default function DepositSystem({ user, onRefreshUser }: DepositSystemProp
   const walletAddress = "TDvrj5yXXpdAje1bfcEvuKMWZ5UG5TrFuF";
 
   useEffect(() => {
+    onRefreshUser();
     fetchDepositHistory();
+
+    // Poll for real-time user balance and deposit status synchronization
+    const interval = setInterval(() => {
+      onRefreshUser();
+      fetchDepositHistory();
+    }, 4000);
+
+    return () => clearInterval(interval);
   }, [user.id]);
 
   const fetchDepositHistory = async () => {
     try {
       setLoadingHistory(true);
-      const res = await api.transactions.list(user.id);
-      // Filter out transactions that represent deposits, or wait, we can fetch all deposits from admin list specifically? No, let's create a dedicated client API or query the database.
-      // Wait, our Express server returns list of deposits. Let's check: Yes! We exposed `GET /api/admin/deposits` for admin, but for users, let's see. In `server.ts` does it have a client deposits list?
-      // Ah! Our transactions list endpoint `/api/transactions/:userId` returns all transaction events, including deposits and detailed logs. Let's see if we can read the general transactions and parse deposits from there, or fetch deposits!
-      // In server.ts, we record deposit requests in `db.deposits` AND record a pending transaction. We can query `/api/transactions/:userId` to show user's transaction ledger, or fetch user's deposits.
-      // Let's check if the client can easily fetch the general history or if we want to query `/api/transactions/:userId` for deposit logs. That's extremely easy and handles it perfectly!
-      // Since `api.transactions.list()` returns pending and completed deposits, we can filter them or render them directly from the ledger. Let's also fetch or filter deposits specifically as well.
-      // Wait! Let's check `server.ts` filters. The `/api/transactions/:userId` returns transaction items like `{ type: "deposit", amount, description, status, createdAt }`. This is excellent and provides an instantaneous, comprehensive history log!
-      // We can also let the user inspect transaction ledger. Let's filter transactions where type === "deposit".
-      const txs = await api.transactions.list(user.id);
-      const depositsOnly = txs.filter((tx) => tx.type === "deposit");
-      // Map these txs to Deposit objects for rendering simplicity
-      const mappedDeposits: Deposit[] = depositsOnly.map((d) => ({
-        id: d.id,
-        userId: d.userId,
-        username: d.username,
-        amount: d.amount,
-        txid: d.description.includes("TXID:") ? d.description.split("TXID:")[1]?.trim() || "N/A" : "Pending Audit",
-        status: d.status === "completed" ? "approved" : d.status === "failed" ? "rejected" : "pending",
-        createdAt: d.createdAt,
-      }));
-      setHistory(mappedDeposits);
+      const rawDeposits = await api.deposit.list(user.id);
+      
+      // Sort newest deposits first
+      const sortedDeposits = [...rawDeposits].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setHistory(sortedDeposits);
     } catch (e) {
       console.error("Could not load deposit history", e);
     } finally {
@@ -215,6 +209,28 @@ export default function DepositSystem({ user, onRefreshUser }: DepositSystemProp
               </div>
             </div>
 
+            {/* Live Bonus Estimator Table */}
+            {parseFloat(amount) > 0 && (
+              <div className="p-4 bg-gray-950 border border-emerald-500/10 rounded-xl space-y-2 text-xs font-mono animate-fade-in" id="deposit-bonus-estimator">
+                <div className="flex justify-between text-gray-400">
+                  <span>Transfer Amount:</span>
+                  <span className="text-white font-semibold">{parseFloat(amount).toFixed(2)} USDT</span>
+                </div>
+                <div className="flex justify-between text-gray-400 flex-row items-center gap-1">
+                  <span>10% Welcome Promo Bonus:</span>
+                  <span className="text-emerald-400 font-bold">
+                    +{Number(parseFloat(amount) * 0.10).toFixed(2)} USDT
+                  </span>
+                </div>
+                <div className="border-t border-gray-800/80 my-1 pt-2 flex justify-between text-white font-bold text-sm">
+                  <span>Total Amount to Receive:</span>
+                  <span className="text-emerald-400 font-extrabold text-base">
+                    {Number(parseFloat(amount) + parseFloat(amount) * 0.10).toFixed(2)} USDT
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Receipt upload screenshot */}
             <div>
               <label className="text-xs font-mono text-gray-400 block mb-1.5">Screenshot proof of transfer (Optional):</label>
@@ -302,31 +318,53 @@ export default function DepositSystem({ user, onRefreshUser }: DepositSystemProp
                   <span className="text-xs text-gray-500 font-mono">No deposit requests recorded.</span>
                 </div>
               ) : (
-                history.map((dep) => (
-                  <div key={dep.id} className="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="text-white font-bold">${dep.amount.toFixed(2)} USDT</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                        dep.status === "approved" ? "bg-emerald-500/10 text-emerald-400" :
-                        dep.status === "pending" ? "bg-amber-500/10 text-amber-500" :
-                        "bg-rose-500/10 text-rose-400"
-                      }`}>
-                        {dep.status}
-                      </span>
-                    </div>
+                history.map((dep) => {
+                  const displayBonus = dep.bonus ?? (dep.amount * 0.10);
+                  const displayTotal = dep.amount + displayBonus;
+                  return (
+                    <div key={dep.id} className="bg-gray-950 p-3.5 rounded-xl border border-gray-800 space-y-2.5">
+                      <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-white font-bold">${dep.amount.toFixed(2)} USDT</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                          dep.status === "approved" ? "bg-emerald-500/10 text-emerald-400" :
+                          dep.status === "pending" ? "bg-amber-500/10 text-amber-500" :
+                          "bg-rose-500/10 text-rose-400"
+                        }`}>
+                          {dep.status}
+                        </span>
+                      </div>
 
-                    <div className="font-mono text-[9px] text-gray-500 space-y-0.5">
-                      <div className="flex justify-between">
-                        <span>TXID Ref:</span>
-                        <span className="text-gray-300 text-right truncate max-w-[150px]">{dep.txid}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Created:</span>
-                        <span className="text-gray-400">{new Date(dep.createdAt).toLocaleString()}</span>
+                      <div className="font-mono text-[9px] text-gray-500 space-y-1 border-t border-gray-900 pt-2">
+                        <div className="flex justify-between">
+                          <span>Deposit Sum:</span>
+                          <span className="text-gray-300 font-semibold">${dep.amount.toFixed(2)} USDT</span>
+                        </div>
+                        {dep.status !== "rejected" && (
+                          <div className="flex justify-between font-mono">
+                            <span>10% Welcome Bonus:</span>
+                            <span className="text-emerald-400 font-medium font-mono">
+                              {dep.status === "approved" ? `+$${displayBonus.toFixed(2)}` : `+$${(dep.amount * 0.10).toFixed(2)} (Pending)`} USDT
+                            </span>
+                          </div>
+                        )}
+                        {dep.status === "approved" && (
+                          <div className="flex justify-between text-white font-semibold bg-gray-900/65 p-1 px-1.5 rounded font-mono">
+                            <span>Total Credited:</span>
+                            <span className="text-emerald-400 font-bold">${displayTotal.toFixed(2)} USDT</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between pt-1 font-mono">
+                          <span>TXID Reference:</span>
+                          <span className="text-gray-300 text-right truncate max-w-[150px]">{dep.txid}</span>
+                        </div>
+                        <div className="flex justify-between font-mono">
+                          <span>Created At:</span>
+                          <span className="text-gray-400">{new Date(dep.createdAt).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

@@ -19,26 +19,28 @@ export default function WithdrawalSystem({ user, onRefreshUser, onNavigate }: Wi
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    onRefreshUser();
     fetchWithdrawHistory();
+
+    // Poll for real-time user balance and state synchronization
+    const interval = setInterval(() => {
+      onRefreshUser();
+      fetchWithdrawHistory();
+    }, 4000);
+
+    return () => clearInterval(interval);
   }, [user.id]);
 
   const fetchWithdrawHistory = async () => {
     try {
       setLoading(true);
-      const txs = await api.transactions.list(user.id);
-      // Filter withdrawal records
-      const withdrawalsOnly = txs.filter((tx) => tx.type === "withdrawal");
-      const mappedWithdrawals: Withdrawal[] = withdrawalsOnly.map((w) => ({
-        id: w.id,
-        userId: w.userId,
-        username: w.username,
-        amount: w.amount,
-        address: w.description.includes("address") ? w.description.split("address")[1]?.trim() || "N/A" : "Wallet Target",
-        network: "TRC20",
-        status: w.status === "completed" ? "approved" : w.status === "failed" ? "rejected" : "pending",
-        createdAt: w.createdAt,
-      }));
-      setHistory(mappedWithdrawals);
+      const rawWithdrawals = await api.withdrawal.list(user.id);
+      
+      // Sort newest withdrawal requests first
+      const sortedWithdrawals = [...rawWithdrawals].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setHistory(sortedWithdrawals);
     } catch (e) {
       console.error("Could not load withdrawal transactions log", e);
     } finally {
@@ -149,28 +151,50 @@ export default function WithdrawalSystem({ user, onRefreshUser, onNavigate }: Wi
               </div>
 
               {/* Amount Input */}
-              <div>
-                <label className="text-xs font-mono text-gray-400 block mb-1.5">Withdrawal Amount:</label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="Min: 10 USDT"
-                    className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
-                    required
-                  />
-                  <div className="absolute right-3.5 top-2.5 flex items-center gap-1.5 text-xs font-bold font-mono">
-                    <span className="text-gray-500">USDT</span>
-                    <button
-                      type="button"
-                      onClick={() => setAmount(user.balance.toString())}
-                      className="text-emerald-400 hover:text-emerald-300 font-bold font-display"
-                    >
-                      MAX
-                    </button>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-mono text-gray-400 block mb-1.5">Withdrawal Amount:</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="Min: 10 USDT"
+                      className="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-white font-mono focus:border-emerald-500 focus:outline-none"
+                      required
+                    />
+                    <div className="absolute right-3.5 top-2.5 flex items-center gap-1.5 text-xs font-bold font-mono">
+                      <span className="text-gray-500">USDT</span>
+                      <button
+                        type="button"
+                        onClick={() => setAmount(user.balance.toString())}
+                        className="text-emerald-400 hover:text-emerald-300 font-bold font-display"
+                      >
+                        MAX
+                      </button>
+                    </div>
                   </div>
                 </div>
+
+                {/* Live Breakdown Table */}
+                {parseFloat(amount) > 0 && (
+                  <div className="p-4 bg-gray-950 border border-gray-800 rounded-xl space-y-2 text-xs font-mono" id="withdrawal-fee-breakdown">
+                    <div className="flex justify-between text-gray-400">
+                      <span>Withdrawal Amount:</span>
+                      <span className="text-white font-semibold">{parseFloat(amount).toFixed(2)} USDT</span>
+                    </div>
+                    <div className="flex justify-between text-gray-400 flex-row items-center gap-1">
+                      <span>2% Fee:</span>
+                      <span className="text-red-400 font-semibold">-{(parseFloat(amount) * 0.02).toFixed(2)} USDT</span>
+                    </div>
+                    <div className="border-t border-gray-800/80 my-1 pt-2 flex justify-between text-white font-bold text-sm">
+                      <span>Final Amount to Receive:</span>
+                      <span className="text-emerald-400">
+                        {Math.max(0, parseFloat(amount) - (parseFloat(amount) * 0.02)).toFixed(2)} USDT
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Destination address */}
@@ -188,11 +212,17 @@ export default function WithdrawalSystem({ user, onRefreshUser, onNavigate }: Wi
               </div>
 
               {/* Warning note */}
-              <div className="bg-gray-950 p-3 flex gap-2.5 items-start border border-gray-800 rounded-xl text-xs text-gray-400 font-mono">
-                <AlertCircle className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <p className="leading-tight text-[11px]">
-                  Each withdrawal is audited manually. Compliance operators finalize payout transfers between 10 to 60 minutes after registration.
-                </p>
+              <div className="bg-gray-950 p-4 flex gap-3 items-start border border-gray-800 rounded-xl text-xs text-gray-400 font-mono" id="withdrawal-warning-notice">
+                <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-white font-bold">Processing Notice</p>
+                  <p className="leading-relaxed text-[11px] text-gray-300">
+                    Withdrawals are processed within 24 hours.
+                  </p>
+                  <p className="leading-relaxed text-[10px] text-gray-500">
+                    Each withdrawal is audited manually by compliance and risk management operators to ensure multi-node ledger transfers complete securely.
+                  </p>
+                </div>
               </div>
 
               <button
@@ -221,7 +251,7 @@ export default function WithdrawalSystem({ user, onRefreshUser, onNavigate }: Wi
               All customer funds are locked inside high-security multi-sig ledger cold-storage networks. Withdrawal approvals require key approvals on multi-node channels.
             </p>
             <p className="text-[11px] text-gray-500 border-t border-gray-800/60 pt-2">
-              Withdrawal fee: <span className="text-emerald-400">0.00%</span> (Fully subsidized by Trade Profit Hub).
+              Withdrawal fee: <span className="text-amber-500 font-semibold">2.00%</span> (Standard blockchain dispatch processing fee).
             </p>
           </div>
         </div>
@@ -244,31 +274,47 @@ export default function WithdrawalSystem({ user, onRefreshUser, onNavigate }: Wi
                   <span className="text-xs text-gray-500 font-mono">No withdrawal requests recorded.</span>
                 </div>
               ) : (
-                history.map((wit) => (
-                  <div key={wit.id} className="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex justify-between items-center text-xs font-mono">
-                      <span className="text-white font-bold">${wit.amount.toFixed(2)} USDT</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                        wit.status === "approved" ? "bg-emerald-500/10 text-emerald-400" :
-                        wit.status === "pending" ? "bg-amber-500/10 text-amber-500" :
-                        "bg-rose-500/10 text-rose-400"
-                      }`}>
-                        {wit.status}
-                      </span>
-                    </div>
+                history.map((wit) => {
+                  const displayFee = wit.fee ?? (wit.amount * 0.02);
+                  const displayFinal = wit.finalAmount ?? (wit.amount * 0.98);
+                  return (
+                    <div key={wit.id} className="bg-gray-950 p-3.5 rounded-xl border border-gray-800 space-y-2.5">
+                      <div className="flex justify-between items-center text-xs font-mono">
+                        <span className="text-white font-bold">${wit.amount.toFixed(2)} USDT</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
+                          wit.status === "approved" ? "bg-emerald-500/10 text-emerald-400" :
+                          wit.status === "pending" ? "bg-amber-500/10 text-amber-500" :
+                          "bg-rose-500/10 text-rose-400"
+                        }`}>
+                          {wit.status}
+                        </span>
+                      </div>
 
-                    <div className="font-mono text-[9px] text-gray-500 space-y-0.5">
-                      <div className="flex justify-between">
-                        <span>Destination Address:</span>
-                        <span className="text-gray-300 text-right truncate max-w-[150px]">{wit.address}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Created:</span>
-                        <span className="text-gray-400">{new Date(wit.createdAt).toLocaleString()}</span>
+                      <div className="font-mono text-[9px] text-gray-500 space-y-1 border-t border-gray-900 pt-2">
+                        <div className="flex justify-between">
+                          <span>Withdrawal Amount:</span>
+                          <span className="text-gray-300 font-semibold">${wit.amount.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>2% processing fee:</span>
+                          <span className="text-red-400">${displayFee.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex justify-between text-white font-semibold bg-gray-900/60 p-1 rounded font-mono">
+                          <span>Final receive sum:</span>
+                          <span className="text-emerald-400 font-bold">${displayFinal.toFixed(2)} USDT</span>
+                        </div>
+                        <div className="flex justify-between pt-1">
+                          <span>Destination Address:</span>
+                          <span className="text-gray-300 text-right truncate max-w-[150px]">{wit.address}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Created:</span>
+                          <span className="text-gray-400">{new Date(wit.createdAt).toLocaleString()}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
