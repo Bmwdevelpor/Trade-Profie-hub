@@ -72,8 +72,14 @@ const DEFAULT_TRADERS: Trader[] = [
   }
 ];
 
+let memoryDb: DatabaseSchema | null = null;
+
 // Helper to load database
 function loadDb(): DatabaseSchema {
+  if (memoryDb) {
+    return memoryDb;
+  }
+
   if (!fs.existsSync(DB_DIR)) {
     fs.mkdirSync(DB_DIR, { recursive: true });
   }
@@ -211,6 +217,7 @@ function loadDb(): DatabaseSchema {
     ];
 
     fs.writeFileSync(DB_FILE, JSON.stringify(freshDb, null, 2), "utf-8");
+    memoryDb = freshDb;
     return freshDb;
   }
 
@@ -226,10 +233,11 @@ function loadDb(): DatabaseSchema {
     if (!parsed.notifications) parsed.notifications = [];
     if (!parsed.traders || parsed.traders.length === 0) parsed.traders = DEFAULT_TRADERS;
     if (!parsed.dailyProfitHistory) parsed.dailyProfitHistory = [];
+    memoryDb = parsed;
     return parsed;
   } catch (e) {
     console.error("Failed to parse db.json, returning backup default.", e);
-    return {
+    const fallbackDb = {
       users: [],
       passwords: {},
       deposits: [],
@@ -239,11 +247,14 @@ function loadDb(): DatabaseSchema {
       traders: DEFAULT_TRADERS,
       dailyProfitHistory: []
     };
+    memoryDb = fallbackDb;
+    return fallbackDb;
   }
 }
 
 // Helper to save database
 function saveDb(db: DatabaseSchema) {
+  memoryDb = db;
   try {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), "utf-8");
   } catch (e) {
