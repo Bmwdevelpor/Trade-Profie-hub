@@ -6,11 +6,12 @@ import { fileURLToPath } from "url";
 import { tmpdir } from "os";
 import { User, Trader, Deposit, Withdrawal, Transaction, Notification, Stats } from "./src/types";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 const isVercel = !!process.env.VERCEL;
-const DB_DIR = isVercel ? tmpdir() : path.join(__dirname, "data");
+const currentDir = typeof __dirname !== "undefined"
+  ? __dirname
+  : path.dirname(fileURLToPath(import.meta.url || "file:///"));
+
+const DB_DIR = isVercel ? tmpdir() : path.join(currentDir, "data");
 const DB_FILE = path.join(DB_DIR, "db.json");
 
 // Define DB Interface
