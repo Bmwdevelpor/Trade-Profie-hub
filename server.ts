@@ -3,12 +3,14 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { fileURLToPath } from "url";
+import { tmpdir } from "os";
 import { User, Trader, Deposit, Withdrawal, Transaction, Notification, Stats } from "./src/types";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const DB_DIR = path.join(__dirname, "data");
+const isVercel = !!process.env.VERCEL;
+const DB_DIR = isVercel ? tmpdir() : path.join(__dirname, "data");
 const DB_FILE = path.join(DB_DIR, "db.json");
 
 // Define DB Interface
@@ -249,13 +251,11 @@ function saveDb(db: DatabaseSchema) {
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
 
-  // Set limits for base64 uploads (necessary for KYC and proof of payments)
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+// Set limits for base64 uploads (necessary for KYC and proof of payments)
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
   // API - Auth Register
   app.post("/api/auth/register", (req, res) => {
@@ -1166,23 +1166,33 @@ async function startServer() {
      VITE INTEGRATION AND ROOT FALLBACK
      ========================================================================== */
 
+async function startServer() {
+  const PORT = 3000;
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa"
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[Trade Profit Hub API] full-stack server running on http://0.0.0.0:${PORT}`);
     });
+  } else {
+    if (!process.env.VERCEL) {
+      const distPath = path.join(process.cwd(), "dist");
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`[Trade Profit Hub API] full-stack server running on http://0.0.0.0:${PORT}`);
+      });
+    }
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[Trade Profit Hub API] full-stack server running on http://0.0.0.0:${PORT}`);
-  });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
